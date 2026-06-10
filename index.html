@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>XR Anatomy Lab: The Human Heart</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <link type="text/css" rel="stylesheet" href="https://xrblocks.github.io/css/xr.css" />
+    <script>
+      window.litDisableBundleWarning = true;
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/",
+          "troika-three-text": "https://cdn.jsdelivr.net/gh/protectwise/troika@028b81cf308f0f22e5aa8e78196be56ec1997af5/packages/troika-three-text/src/index.js",
+          "troika-three-utils": "https://cdn.jsdelivr.net/gh/protectwise/troika@v0.52.4/packages/troika-three-utils/src/index.js",
+          "troika-worker-utils": "https://cdn.jsdelivr.net/gh/protectwise/troika@v0.52.4/packages/troika-worker-utils/src/index.js",
+          "bidi-js": "https://esm.sh/bidi-js@%5E1.0.2?target=es2022",
+          "webgl-sdf-generator": "https://esm.sh/webgl-sdf-generator@1.1.1/es2022/webgl-sdf-generator.mjs",
+          "lit": "https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js",
+          "lit/": "https://esm.run/lit@3/",
+          "xrblocks": "https://cdn.jsdelivr.net/npm/xrblocks@0.11.0/build/xrblocks.js",
+          "xrblocks/addons/": "https://cdn.jsdelivr.net/npm/xrblocks@0.11.0/build/addons/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from 'three';
+      import * as xb from 'xrblocks';
+      import { Text } from 'troika-three-text';
+
+      /**
+       * XR Anatomy Lab Simulation
+       * Features a procedural 3D heart that expand and shows labels on interaction.
+       */
+      class AnatomyLabScript extends xb.Script {
+        constructor() {
+          super();
+          this.heartModel = null;
+          this.labelsGroup = new THREE.Group();
+          this.isExpanded = false;
+        }
+
+        async init() {
+          // 1. Lighting Setup
+          const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 3);
+          this.add(hemiLight);
+
+          const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+          dirLight.position.set(1, 2, 1);
+          this.add(dirLight);
+
+          // 2. Create Procedural Heart
+          // Since external fetches are failing due to CORS/403, we build a stylized procedural heart.
+          this.createHeartModel();
+          
+          // 3. Create Labels
+          this.createLabels();
+          this.heartModel.add(this.labelsGroup);
+          this.labelsGroup.visible = false;
+
+          // 4. Instructional UI
+          this.createInstructions();
+        }
+
+        createHeartModel() {
+          const group = new THREE.Group();
+          const heartMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xd32f2f, 
+            shininess: 100, 
+            emissive: 0x440000,
+            emissiveIntensity: 0.1
+          });
+          
+          // Construct heart shape from primitives
+          const atrium1 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 32), heartMaterial);
+          atrium1.position.set(-0.06, 0.05, 0);
+          
+          const atrium2 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 32), heartMaterial);
+          atrium2.position.set(0.06, 0.05, 0);
+          
+          const ventricles = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.35, 32), heartMaterial);
+          ventricles.rotation.x = Math.PI;
+          ventricles.position.set(0, -0.1, 0);
+          
+          // Add blood vessels (Aorta)
+          const aortaGeom = new THREE.TorusGeometry(0.08, 0.02, 16, 32, Math.PI / 1.5);
+          const aorta = new THREE.Mesh(aortaGeom, new THREE.MeshPhongMaterial({ color: 0x8b0000 }));
+          aorta.position.set(0, 0.1, -0.05);
+          aorta.rotation.set(Math.PI / 2, 0, Math.PI / 4);
+
+          group.add(atrium1, atrium2, ventricles, aorta);
+          
+          this.heartModel = group;
+          this.heartModel.position.set(0, xb.user.height - 0.2, -xb.user.objectDistance);
+          this.add(this.heartModel);
+        }
+
+        createLabels() {
+          // Relative to the heart group
+          const lvLabel = this.makeTextLabel("Left Ventricle", new THREE.Vector3(0.2, -0.15, 0.1));
+          const rvLabel = this.makeTextLabel("Right Ventricle", new THREE.Vector3(-0.2, -0.15, 0.1));
+          
+          this.labelsGroup.add(lvLabel);
+          this.labelsGroup.add(rvLabel);
+        }
+
+        makeTextLabel(text, position) {
+          const t = new Text();
+          t.text = text;
+          t.fontSize = 0.035;
+          t.color = 0xffffff;
+          t.position.copy(position);
+          t.anchorX = 'center';
+          t.sync();
+          
+          const bgGeom = new THREE.PlaneGeometry(0.25, 0.06);
+          const bgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 });
+          const bg = new THREE.Mesh(bgGeom, bgMat);
+          bg.position.set(0, 0, -0.01);
+          t.add(bg);
+
+          return t;
+        }
+
+        createInstructions() {
+          const panel = new xb.SpatialPanel({
+            width: 1.0,
+            height: 0.35,
+            backgroundColor: '#111111cc'
+          });
+          panel.position.set(0, xb.user.height + 0.5, -xb.user.panelDistance);
+          
+          const grid = panel.addGrid();
+          grid.addRow().addText({
+            text: "XR ANATOMY LAB\nPinch/Click the heart to study its chambers.",
+            fontSize: 0.06,
+            fontColor: "#ffffff"
+          });
+          
+          this.add(panel);
+        }
+
+        onSelectEnd(event) {
+          if (!this.heartModel) return;
+
+          // Perform intersection check
+          const intersections = xb.core.input.intersectObjectByController(event.target, this.heartModel);
+          if (intersections.length > 0) {
+            this.toggleExploration();
+          }
+        }
+
+        toggleExploration() {
+          this.isExpanded = !this.isExpanded;
+          this.labelsGroup.visible = this.isExpanded;
+
+          // Change material appearance on expand
+          this.heartModel.traverse((child) => {
+            if (child.isMesh) {
+              child.material.emissiveIntensity = this.isExpanded ? 0.8 : 0.1;
+            }
+          });
+        }
+
+        update() {
+          const dt = xb.getDeltaTime();
+          const now = Date.now();
+          
+          if (this.heartModel) {
+            // Smoothly transition scale
+            const targetScale = this.isExpanded ? 2.5 : 1.0;
+            const lerpSpeed = 0.15;
+            this.heartModel.scale.x = THREE.MathUtils.lerp(this.heartModel.scale.x, targetScale, lerpSpeed);
+            this.heartModel.scale.y = THREE.MathUtils.lerp(this.heartModel.scale.y, targetScale, lerpSpeed);
+            this.heartModel.scale.z = THREE.MathUtils.lerp(this.heartModel.scale.z, targetScale, lerpSpeed);
+
+            // Heartbeat animation (pulse)
+            if (!this.isExpanded) {
+              const pulse = 1.0 + Math.sin(now * 0.008) * 0.04;
+              this.heartModel.scale.multiplyScalar(pulse);
+              this.heartModel.rotation.y += 0.005;
+            } else {
+              // Face the user slightly when expanded
+              this.heartModel.rotation.y = THREE.MathUtils.lerp(this.heartModel.rotation.y, 0, 0.05);
+            }
+          }
+          
+          // Billboarding for labels
+          if (this.labelsGroup.visible) {
+            this.labelsGroup.children.forEach(label => {
+              label.lookAt(xb.core.camera.position);
+            });
+          }
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const options = new xb.Options();
+        options.enableUI();
+        options.reticles.enabled = true;
+        options.setAppTitle("XR Anatomy Lab");
+        
+        xb.add(new AnatomyLabScript());
+        xb.init(options);
+      });
+    </script>
+  </body>
+</html>
